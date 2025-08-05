@@ -56,4 +56,10 @@ pub enum TintedBuilderError {
     /// This variant is used when an input string does not correspond to any valid scheme system
     #[error("invalid scheme system: {0}")]
     InvalidSchemeSystem(String),
+
+    /// Error indicating that an invalid tint level was provided.
+    ///
+    /// This variant is used when a tint level is not within the valid range of 0.0 to 1.0.
+    #[error("invalid tint level: {0}")]
+    InvalidTintLevel(String),
 }

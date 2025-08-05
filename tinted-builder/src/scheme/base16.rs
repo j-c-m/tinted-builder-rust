@@ -4,6 +4,7 @@ use std::{collections::HashMap, fmt};
 
 pub use crate::scheme::color::Color;
 
+use crate::scheme::color::adjust_brightness_and_saturation;
 use crate::{utils::slugify, SchemeSystem, SchemeVariant};
 
 pub(crate) const REQUIRED_BASE16_PALETTE_KEYS: [&str; 16] = [
@@ -17,6 +18,10 @@ pub(crate) const REQUIRED_BASE24_PALETTE_KEYS: [&str; 24] = [
     "base12", "base13", "base14", "base15", "base16", "base17",
 ];
 
+pub(crate) const OPT_BASE16_PALETTE_KEYS: [&str; 7] = [
+    "opt08", "opt09", "opt0A", "opt0B", "opt0C", "opt0D", "opt0E",
+];
+
 #[derive(Deserialize, Serialize)]
 struct SchemeWrapper {
     pub(crate) system: SchemeSystem,
@@ -25,6 +30,8 @@ struct SchemeWrapper {
     pub(crate) author: String,
     pub(crate) description: Option<String>,
     pub(crate) variant: Option<SchemeVariant>,
+    pub(crate) bright: Option<f32>,
+    pub(crate) saturation: Option<f32>,
     pub(crate) palette: HashMap<String, String>,
 }
 
@@ -36,7 +43,10 @@ pub struct Base16Scheme {
     pub author: String,
     pub description: Option<String>,
     pub variant: SchemeVariant,
+    pub bright: Option<f32>,
+    pub saturation: Option<f32>,
     pub palette: HashMap<String, Color>,
+    pub provided_opt_keys: Vec<String>,
 }
 
 impl fmt::Display for Base16Scheme {
@@ -49,6 +59,12 @@ impl fmt::Display for Base16Scheme {
         writeln!(f, "slug: \"{}\"", self.slug)?;
         writeln!(f, "system: \"{}\"", self.system)?;
         writeln!(f, "variant: \"{}\"", self.variant)?;
+        if let Some(bright) = self.bright {
+            writeln!(f, "bright: {}", bright)?;
+        }
+        if let Some(saturation) = self.saturation {
+            writeln!(f, "saturation: {}", saturation)?;
+        }
         writeln!(f, "palette:")?;
 
         let mut palette_vec: Vec<(String, Color)> = self
@@ -56,6 +72,11 @@ impl fmt::Display for Base16Scheme {
             .clone()
             .iter()
             .map(|(k, v)| (k.to_string(), v.clone()))
+            .filter(|(k, _)| {
+                REQUIRED_BASE16_PALETTE_KEYS.contains(&k.as_str())
+                    || (OPT_BASE16_PALETTE_KEYS.contains(&k.as_str())
+                        && self.provided_opt_keys.contains(k))
+            })
             .collect();
         palette_vec.sort_by_key(|k| k.0.clone());
 
@@ -76,6 +97,18 @@ impl<'de> Deserialize<'de> for Base16Scheme {
             .slug
             .map_or(slugify(&wrapper.name), |slug| slugify(&slug));
         let variant = wrapper.variant.unwrap_or(SchemeVariant::Dark);
+        let brgt_adj = wrapper.bright.unwrap_or(if variant == SchemeVariant::Dark {
+            0.1
+        } else {
+            -0.1
+        });
+        let sat_adj = wrapper
+            .saturation
+            .unwrap_or(if variant == SchemeVariant::Dark {
+                -0.2
+            } else {
+                0.2
+            });
 
         match wrapper.system {
             SchemeSystem::Base16 => {
@@ -110,7 +143,14 @@ impl<'de> Deserialize<'de> for Base16Scheme {
             }
         }
 
-        let palette_result: Result<HashMap<String, Color>, _> = wrapper
+        let provided_opt_keys: Vec<String> = wrapper
+            .palette
+            .keys()
+            .filter(|k| OPT_BASE16_PALETTE_KEYS.contains(&k.as_str()))
+            .cloned()
+            .collect();
+
+        let mut palette_result: Result<HashMap<String, Color>, _> = wrapper
             .palette
             .into_iter()
             .map(|(key, value)| {
@@ -120,6 +160,36 @@ impl<'de> Deserialize<'de> for Base16Scheme {
             })
             .collect();
 
+        let mut palette = palette_result?;
+
+        if wrapper.system == SchemeSystem::Base16 {
+            let opt_pairs = vec![
+                ("opt08", "base08"),
+                ("opt09", "base09"),
+                ("opt0A", "base0A"),
+                ("opt0B", "base0B"),
+                ("opt0C", "base0C"),
+                ("opt0D", "base0D"),
+                ("opt0E", "base0E"),
+            ];
+
+            for (opt_key, base_key) in opt_pairs {
+                if !palette.contains_key(&opt_key.to_string()) {
+                    let base_color = palette
+                        .get(&base_key.to_string())
+                        .ok_or(serde::de::Error::custom(format!(
+                            "Missing base key {} for generating {}",
+                            base_key, opt_key
+                        )))?
+                        .clone();
+                    let new_color =
+                        adjust_brightness_and_saturation(&base_color, brgt_adj, sat_adj)
+                            .map_err(serde::de::Error::custom)?;
+                    palette.insert(opt_key.to_string(), new_color);
+                }
+            }
+        }
+
         Ok(Base16Scheme {
             name: wrapper.name,
             slug,
@@ -127,7 +197,10 @@ impl<'de> Deserialize<'de> for Base16Scheme {
             author: wrapper.author,
             description: wrapper.description,
             variant,
-            palette: palette_result?,
+            bright: wrapper.bright,
+            saturation: wrapper.saturation,
+            palette,
+            provided_opt_keys,
         })
     }
 }
@@ -146,12 +219,26 @@ impl Serialize for Base16Scheme {
             state.serialize_field("description", description)?;
         }
         state.serialize_field("variant", &self.variant)?;
+        if let Some(bright) = &self.bright {
+            state.serialize_field("bright", bright)?;
+        }
+        if let Some(saturation) = &self.saturation {
+            state.serialize_field("saturation", saturation)?;
+        }
 
-        // Collect and sort the palette by key
-        let mut sorted_palette: Vec<(&String, &Color)> = self.palette.iter().collect();
+        // Collect and sort the palette by key, including only required keys and provided opt keys
+        let mut sorted_palette: Vec<(&String, &Color)> = self
+            .palette
+            .iter()
+            .filter(|(k, _)| {
+                REQUIRED_BASE16_PALETTE_KEYS.contains(&k.as_str())
+                    || (OPT_BASE16_PALETTE_KEYS.contains(&k.as_str())
+                        && self.provided_opt_keys.contains(k))
+            })
+            .collect();
         sorted_palette.sort_by(|a, b| a.0.cmp(b.0));
 
-        // Serialize the sorted palette as a map within the struct
+        // Serialize the filtered palette as a map within the struct
         state.serialize_field("palette", &SortedPalette(sorted_palette))?;
 
         state.end()

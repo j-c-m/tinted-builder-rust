@@ -4,7 +4,9 @@ use std::{collections::HashMap, fmt};
 
 pub use crate::scheme::color::Color;
 
-use crate::scheme::color::adjust_brightness_and_saturation;
+use crate::scheme::color::{
+    adjust_brightness_and_saturation, generate_grayish_gradient, invert_lightness, tint_color,
+};
 use crate::{utils::slugify, SchemeSystem, SchemeVariant};
 
 pub(crate) const REQUIRED_BASE16_PALETTE_KEYS: [&str; 16] = [
@@ -18,8 +20,25 @@ pub(crate) const REQUIRED_BASE24_PALETTE_KEYS: [&str; 24] = [
     "base12", "base13", "base14", "base15", "base16", "base17",
 ];
 
-pub(crate) const OPT_BASE16_PALETTE_KEYS: [&str; 7] = [
-    "opt08", "opt09", "opt0A", "opt0B", "opt0C", "opt0D", "opt0E",
+pub(crate) const OPT_BASE16_PALETTE_KEYS: [(&str, &str); 7] = [
+    ("opt08", "base08"),
+    ("opt09", "base09"),
+    ("opt0A", "base0A"),
+    ("opt0B", "base0B"),
+    ("opt0C", "base0C"),
+    ("opt0D", "base0D"),
+    ("opt0E", "base0E"),
+];
+
+pub(crate) const REQUIRED_ANSI8_PALETTE_KEYS: [(&str, &str); 8] = [
+    ("ansi0", "base00"),
+    ("ansi1", "base08"),
+    ("ansi2", "base0B"),
+    ("ansi3", "base0A"),
+    ("ansi4", "base0D"),
+    ("ansi5", "base0E"),
+    ("ansi6", "base0C"),
+    ("ansi7", "base05"),
 ];
 
 #[derive(Deserialize, Serialize)]
@@ -46,7 +65,32 @@ pub struct Base16Scheme {
     pub bright: Option<f32>,
     pub saturation: Option<f32>,
     pub palette: HashMap<String, Color>,
-    pub provided_opt_keys: Vec<String>,
+    pub provided_palette_keys: Vec<String>,
+}
+
+/// Generates optional colors (opt08 to opt0E) for the palette if they are not present.
+fn generate_optional_colors<D: serde::de::Error>(
+    palette: &mut HashMap<String, Color>,
+    brgt_adj: f32,
+    sat_adj: f32,
+) -> Result<(), D> {
+    let opt_pairs = &OPT_BASE16_PALETTE_KEYS[..];
+
+    for (opt_key, base_key) in opt_pairs {
+        if !palette.contains_key(&opt_key.to_string()) {
+            let base_color = palette
+                .get(&base_key.to_string())
+                .ok_or(D::custom(format!(
+                    "Missing base key {} for generating {}",
+                    base_key, opt_key
+                )))?
+                .clone();
+            let new_color = adjust_brightness_and_saturation(&base_color, brgt_adj, sat_adj)
+                .map_err(D::custom)?;
+            palette.insert(opt_key.to_string(), new_color);
+        }
+    }
+    Ok(())
 }
 
 impl fmt::Display for Base16Scheme {
@@ -72,11 +116,7 @@ impl fmt::Display for Base16Scheme {
             .clone()
             .iter()
             .map(|(k, v)| (k.to_string(), v.clone()))
-            .filter(|(k, _)| {
-                REQUIRED_BASE16_PALETTE_KEYS.contains(&k.as_str())
-                    || (OPT_BASE16_PALETTE_KEYS.contains(&k.as_str())
-                        && self.provided_opt_keys.contains(k))
-            })
+            .filter(|(k, _)| self.provided_palette_keys.contains(k))
             .collect();
         palette_vec.sort_by_key(|k| k.0.clone());
 
@@ -110,7 +150,95 @@ impl<'de> Deserialize<'de> for Base16Scheme {
                 0.2
             });
 
+        let provided_palette_keys: Vec<String> = wrapper.palette.keys().cloned().collect();
+        let mut palette = HashMap::new();
+
         match wrapper.system {
+            SchemeSystem::Ansi8 => {
+                let contains_all_keys = REQUIRED_ANSI8_PALETTE_KEYS
+                    .iter()
+                    .all(|(ansi_key, _)| wrapper.palette.contains_key(*ansi_key));
+
+                if !contains_all_keys {
+                    return Err(serde::de::Error::custom(format!(
+                        "{} scheme does not contain the required palette properties",
+                        wrapper.system
+                    )));
+                }
+
+                for &(ansi_key, base_key) in &REQUIRED_ANSI8_PALETTE_KEYS {
+                    if let Some(hex) = wrapper.palette.get(ansi_key) {
+                        let color = Color::new(hex.clone())
+                            .map_err(|e| serde::de::Error::custom(e.to_string()))?;
+                        palette.insert(base_key.to_string(), color);
+                    }
+                }
+
+                // Generate base07
+                let base00 = palette
+                    .get("base00")
+                    .ok_or(serde::de::Error::custom("Missing base00"))?
+                    .clone();
+                let base07 = invert_lightness(&base00).map_err(serde::de::Error::custom)?;
+                palette.insert("base07".to_string(), base07);
+
+                // Generate base01 to base04 from gradient between base00 and base05
+                let base05 = palette
+                    .get("base05")
+                    .ok_or(serde::de::Error::custom("Missing base05"))?
+                    .clone();
+                let gradient01_05 = generate_grayish_gradient(&base00, &base05, 6)
+                    .map_err(serde::de::Error::custom)?;
+                palette.insert("base01".to_string(), gradient01_05[1].clone());
+                palette.insert("base02".to_string(), gradient01_05[2].clone());
+                palette.insert("base03".to_string(), gradient01_05[3].clone());
+                palette.insert("base04".to_string(), gradient01_05[4].clone());
+
+                // Generate base06 from gradient between base05 and base07m
+                let base07 = palette
+                    .get("base07")
+                    .ok_or(serde::de::Error::custom("Missing base07"))?
+                    .clone();
+                let gradient05_07 = generate_grayish_gradient(&base05, &base07, 3)
+                    .map_err(serde::de::Error::custom)?;
+                palette.insert("base06".to_string(), gradient05_07[1].clone());
+
+                // Generate base09 (orange: tint between red and yellow)
+                let base08 = palette
+                    .get("base08")
+                    .ok_or(serde::de::Error::custom("Missing base08"))?
+                    .clone();
+                let base0a = palette
+                    .get("base0A")
+                    .ok_or(serde::de::Error::custom("Missing base0A"))?
+                    .clone();
+                let base09 = tint_color(&base08, &base0a, 0.5).map_err(serde::de::Error::custom)?;
+                palette.insert("base09".to_string(), base09);
+
+                // Generate base0F (brown: tint between red and green)
+                let base0b = palette
+                    .get("base0B")
+                    .ok_or(serde::de::Error::custom("Missing base0B"))?
+                    .clone();
+                let base0f = tint_color(&base08, &base0b, 0.5).map_err(serde::de::Error::custom)?;
+                palette.insert("base0f".to_string(), base0f);
+
+                // Generate opt08 to opt0E
+                generate_optional_colors(&mut palette, brgt_adj, sat_adj)?;
+
+                Ok(Base16Scheme {
+                    name: wrapper.name,
+                    slug,
+                    system: wrapper.system, // Retain Ansi8 for serialization
+                    author: wrapper.author,
+                    description: wrapper.description,
+                    variant,
+                    bright: wrapper.bright,
+                    saturation: wrapper.saturation,
+                    palette,
+                    provided_palette_keys: provided_palette_keys,
+                })
+            }
             SchemeSystem::Base16 => {
                 let contains_all_keys = REQUIRED_BASE16_PALETTE_KEYS
                     .iter()
@@ -122,6 +250,34 @@ impl<'de> Deserialize<'de> for Base16Scheme {
                         wrapper.system
                     )));
                 }
+
+                let palette_result: Result<HashMap<String, Color>, _> = wrapper
+                    .palette
+                    .into_iter()
+                    .map(|(key, value)| {
+                        Color::new(value)
+                            .map_err(|e| serde::de::Error::custom(e.to_string()))
+                            .map(|color| (key, color))
+                    })
+                    .collect();
+
+                let mut palette = palette_result?;
+
+                // Generate opt08 to opt0E
+                generate_optional_colors(&mut palette, brgt_adj, sat_adj)?;
+
+                Ok(Base16Scheme {
+                    name: wrapper.name,
+                    slug,
+                    system: wrapper.system,
+                    author: wrapper.author,
+                    description: wrapper.description,
+                    variant,
+                    bright: wrapper.bright,
+                    saturation: wrapper.saturation,
+                    palette,
+                    provided_palette_keys: provided_palette_keys,
+                })
             }
             SchemeSystem::Base24 => {
                 let contains_all_keys = REQUIRED_BASE24_PALETTE_KEYS
@@ -134,74 +290,37 @@ impl<'de> Deserialize<'de> for Base16Scheme {
                         wrapper.system
                     )));
                 }
+
+                let palette_result: Result<HashMap<String, Color>, _> = wrapper
+                    .palette
+                    .into_iter()
+                    .map(|(key, value)| {
+                        Color::new(value)
+                            .map_err(|e| serde::de::Error::custom(e.to_string()))
+                            .map(|color| (key, color))
+                    })
+                    .collect();
+
+                Ok(Base16Scheme {
+                    name: wrapper.name,
+                    slug,
+                    system: wrapper.system,
+                    author: wrapper.author,
+                    description: wrapper.description,
+                    variant,
+                    bright: wrapper.bright,
+                    saturation: wrapper.saturation,
+                    palette: palette_result?,
+                    provided_palette_keys: provided_palette_keys,
+                })
             }
             SchemeSystem::List | SchemeSystem::ListBase16 | SchemeSystem::ListBase24 => {
-                return Err(serde::de::Error::custom(format!(
+                Err(serde::de::Error::custom(format!(
                     "{} is not a valid Scheme system for a specific scheme",
                     wrapper.system
-                )));
+                )))
             }
         }
-
-        let provided_opt_keys: Vec<String> = wrapper
-            .palette
-            .keys()
-            .filter(|k| OPT_BASE16_PALETTE_KEYS.contains(&k.as_str()))
-            .cloned()
-            .collect();
-
-        let mut palette_result: Result<HashMap<String, Color>, _> = wrapper
-            .palette
-            .into_iter()
-            .map(|(key, value)| {
-                Color::new(value)
-                    .map(|color| (key, color))
-                    .map_err(|e| serde::de::Error::custom(e.to_string()))
-            })
-            .collect();
-
-        let mut palette = palette_result?;
-
-        if wrapper.system == SchemeSystem::Base16 {
-            let opt_pairs = vec![
-                ("opt08", "base08"),
-                ("opt09", "base09"),
-                ("opt0A", "base0A"),
-                ("opt0B", "base0B"),
-                ("opt0C", "base0C"),
-                ("opt0D", "base0D"),
-                ("opt0E", "base0E"),
-            ];
-
-            for (opt_key, base_key) in opt_pairs {
-                if !palette.contains_key(&opt_key.to_string()) {
-                    let base_color = palette
-                        .get(&base_key.to_string())
-                        .ok_or(serde::de::Error::custom(format!(
-                            "Missing base key {} for generating {}",
-                            base_key, opt_key
-                        )))?
-                        .clone();
-                    let new_color =
-                        adjust_brightness_and_saturation(&base_color, brgt_adj, sat_adj)
-                            .map_err(serde::de::Error::custom)?;
-                    palette.insert(opt_key.to_string(), new_color);
-                }
-            }
-        }
-
-        Ok(Base16Scheme {
-            name: wrapper.name,
-            slug,
-            system: wrapper.system,
-            author: wrapper.author,
-            description: wrapper.description,
-            variant,
-            bright: wrapper.bright,
-            saturation: wrapper.saturation,
-            palette,
-            provided_opt_keys,
-        })
     }
 }
 
@@ -226,15 +345,11 @@ impl Serialize for Base16Scheme {
             state.serialize_field("saturation", saturation)?;
         }
 
-        // Collect and sort the palette by key, including only required keys and provided opt keys
+        // Collect and sort the palette by key, including only provided keys
         let mut sorted_palette: Vec<(&String, &Color)> = self
             .palette
             .iter()
-            .filter(|(k, _)| {
-                REQUIRED_BASE16_PALETTE_KEYS.contains(&k.as_str())
-                    || (OPT_BASE16_PALETTE_KEYS.contains(&k.as_str())
-                        && self.provided_opt_keys.contains(k))
-            })
+            .filter(|(k, _)| self.provided_palette_keys.contains(k))
             .collect();
         sorted_palette.sort_by(|a, b| a.0.cmp(b.0));
 

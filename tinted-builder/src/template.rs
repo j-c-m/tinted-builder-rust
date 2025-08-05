@@ -78,7 +78,7 @@ impl Template {
     /// ```
     pub fn render(&self) -> Result<String, TintedBuilderError> {
         match self.scheme {
-            Scheme::Base16(ref scheme) | Scheme::Base24(ref scheme) => {
+            Scheme::Base16(ref scheme) | Scheme::Base24(ref scheme) | Scheme::Ansi8(ref scheme) => {
                 let ctx = base16::to_template_context(&scheme.clone());
                 let rendered = base16::render(&self.content, &ctx)?;
 

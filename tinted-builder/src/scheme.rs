@@ -19,6 +19,9 @@ pub enum Scheme {
     /// Base24 variant with Base16Scheme deserialized content. Base16Scheme is built to support
     /// basic supersets of Base16 schemes.
     Base24(Base16Scheme),
+    /// Ansi8 variant with Base16Scheme deserialized content. Base16Scheme is built to support
+    /// generation of Base16 colors from Ansi8 input.
+    Ansi8(Base16Scheme),
 }
 
 impl Scheme {
@@ -26,6 +29,7 @@ impl Scheme {
         match self {
             Scheme::Base16(scheme) => scheme.author.to_string(),
             Scheme::Base24(scheme) => scheme.author.to_string(),
+            Scheme::Ansi8(scheme) => scheme.author.to_string(),
         }
     }
     pub fn get_scheme_description(&self) -> String {
@@ -40,30 +44,39 @@ impl Scheme {
                 .clone()
                 .map(|s| s.to_string())
                 .unwrap_or_default(),
+            Scheme::Ansi8(scheme) => scheme
+                .description
+                .clone()
+                .map(|s| s.to_string())
+                .unwrap_or_default(),
         }
     }
     pub fn get_scheme_name(&self) -> String {
         match self {
             Scheme::Base16(scheme) => scheme.name.to_string(),
             Scheme::Base24(scheme) => scheme.name.to_string(),
+            Scheme::Ansi8(scheme) => scheme.name.to_string(),
         }
     }
     pub fn get_scheme_slug(&self) -> String {
         match self {
             Scheme::Base16(scheme) => scheme.slug.to_string(),
             Scheme::Base24(scheme) => scheme.slug.to_string(),
+            Scheme::Ansi8(scheme) => scheme.slug.to_string(),
         }
     }
     pub fn get_scheme_system(&self) -> SchemeSystem {
         match self {
             Scheme::Base16(_) => SchemeSystem::Base16,
             Scheme::Base24(_) => SchemeSystem::Base24,
+            Scheme::Ansi8(_) => SchemeSystem::Ansi8,
         }
     }
     pub fn get_scheme_variant(&self) -> SchemeVariant {
         match self {
             Scheme::Base16(scheme) => scheme.variant.clone(),
             Scheme::Base24(scheme) => scheme.variant.clone(),
+            Scheme::Ansi8(scheme) => scheme.variant.clone(),
         }
     }
 }
@@ -79,6 +92,7 @@ pub enum SchemeSystem {
     Base16,
     /// Base24 scheme system.
     Base24,
+    Ansi8,
     List,
     ListBase16,
     ListBase24,
@@ -93,10 +107,15 @@ impl SchemeSystem {
             SchemeSystem::List => "list",
             SchemeSystem::ListBase16 => "listbase16",
             SchemeSystem::ListBase24 => "listbase24",
+            SchemeSystem::Ansi8 => "ansi8",
         }
     }
     pub fn variants() -> &'static [SchemeSystem] {
-        static VARIANTS: &[SchemeSystem] = &[SchemeSystem::Base16, SchemeSystem::Base24];
+        static VARIANTS: &[SchemeSystem] = &[
+            SchemeSystem::Base16,
+            SchemeSystem::Base24,
+            SchemeSystem::Ansi8,
+        ];
         VARIANTS
     }
 }
@@ -122,6 +141,7 @@ impl FromStr for SchemeSystem {
         match system_str {
             "base16" => Ok(Self::Base16),
             "base24" => Ok(Self::Base24),
+            "ansi8" => Ok(Self::Ansi8),
             _ => Err(TintedBuilderError::InvalidSchemeSystem(
                 system_str.to_string(),
             )),

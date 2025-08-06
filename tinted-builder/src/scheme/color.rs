@@ -169,19 +169,16 @@ pub fn adjust_hsl(
     sat_adj: f32,
     light_adj: f32,
 ) -> Result<Color, TintedBuilderError> {
-    let hue_factor = 1.0 + hue_adj;
-    let new_h = (color.hsl.0 * hue_factor).rem_euclid(360.0);
-    let sat_factor = 1.0 + sat_adj;
-    let new_s = (color.hsl.1 * sat_factor).clamp(0.0, 1.0);
-    let light_factor = 1.0 + light_adj;
-    let new_l = (color.hsl.2 * light_factor).clamp(0.0, 1.0);
-    let adjusted_hsl = (new_h, new_s, new_l);
+    let adjusted_hsl = (
+        (color.hsl.0 * (1.0 + hue_adj)).rem_euclid(360.0),
+        (color.hsl.1 * (1.0 + sat_adj)).clamp(0.0, 1.0),
+        (color.hsl.2 * (1.0 + light_adj)).clamp(0.0, 1.0),
+    );
     let adjusted_rgb = hsl_to_rgb(&adjusted_hsl);
-    let hex_full = format!(
+    Color::new(format!(
         "{:02x}{:02x}{:02x}",
         adjusted_rgb.0, adjusted_rgb.1, adjusted_rgb.2
-    );
-    Color::new(hex_full)
+    ))
 }
 
 // Tint a source color with a tint color at a given level

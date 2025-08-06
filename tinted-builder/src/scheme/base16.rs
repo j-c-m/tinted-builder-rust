@@ -4,9 +4,7 @@ use std::{collections::HashMap, fmt};
 
 pub use crate::scheme::color::Color;
 
-use crate::scheme::color::{
-    adjust_brightness_and_saturation, generate_grayish_gradient, invert_lightness, tint_color,
-};
+use crate::scheme::color::{adjust_hsl, generate_lightness_gradient, invert_lightness, tint_color};
 use crate::{utils::slugify, SchemeSystem, SchemeVariant};
 
 pub(crate) const REQUIRED_BASE16_PALETTE_KEYS: [&str; 16] = [
@@ -85,8 +83,7 @@ fn generate_optional_colors<D: serde::de::Error>(
                     base_key, opt_key
                 )))?
                 .clone();
-            let new_color = adjust_brightness_and_saturation(&base_color, brgt_adj, sat_adj)
-                .map_err(D::custom)?;
+            let new_color = adjust_hsl(&base_color, 0.0, sat_adj, brgt_adj).map_err(D::custom)?;
             palette.insert(opt_key.to_string(), new_color);
         }
     }
@@ -187,7 +184,7 @@ impl<'de> Deserialize<'de> for Base16Scheme {
                     .get("base05")
                     .ok_or(serde::de::Error::custom("Missing base05"))?
                     .clone();
-                let gradient01_05 = generate_grayish_gradient(&base00, &base05, 6)
+                let gradient01_05 = generate_lightness_gradient(&base00, &base05, 6)
                     .map_err(serde::de::Error::custom)?;
                 palette.insert("base01".to_string(), gradient01_05[1].clone());
                 palette.insert("base02".to_string(), gradient01_05[2].clone());
@@ -199,7 +196,7 @@ impl<'de> Deserialize<'de> for Base16Scheme {
                     .get("base07")
                     .ok_or(serde::de::Error::custom("Missing base07"))?
                     .clone();
-                let gradient05_07 = generate_grayish_gradient(&base05, &base07, 3)
+                let gradient05_07 = generate_lightness_gradient(&base05, &base07, 3)
                     .map_err(serde::de::Error::custom)?;
                 palette.insert("base06".to_string(), gradient05_07[1].clone());
 

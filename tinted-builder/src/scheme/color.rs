@@ -162,17 +162,20 @@ fn hue_to_rgb(p: f32, q: f32, t: f32) -> f32 {
     }
 }
 
-// Adjust color brightness and saturation
-pub fn adjust_brightness_and_saturation(
+// Adjust color hue, saturation, and lightness
+pub fn adjust_hsl(
     color: &Color,
-    brgt_adj: f32,
+    hue_adj: f32,
     sat_adj: f32,
+    light_adj: f32,
 ) -> Result<Color, TintedBuilderError> {
-    let bright_factor = 1.0 + brgt_adj;
-    let new_l = (color.hsl.2 * bright_factor).clamp(0.0, 1.0);
+    let hue_factor = 1.0 + hue_adj;
+    let new_h = (color.hsl.0 * hue_factor).rem_euclid(360.0);
     let sat_factor = 1.0 + sat_adj;
     let new_s = (color.hsl.1 * sat_factor).clamp(0.0, 1.0);
-    let adjusted_hsl = (color.hsl.0, new_s, new_l);
+    let light_factor = 1.0 + light_adj;
+    let new_l = (color.hsl.2 * light_factor).clamp(0.0, 1.0);
+    let adjusted_hsl = (new_h, new_s, new_l);
     let adjusted_rgb = hsl_to_rgb(&adjusted_hsl);
     let hex_full = format!(
         "{:02x}{:02x}{:02x}",
@@ -212,8 +215,8 @@ pub fn tint_color(source: &Color, tint: &Color, level: f32) -> Result<Color, Tin
     Color::new(hex_full)
 }
 
-// Generate n grayish colors between two colors
-pub fn generate_grayish_gradient(
+// Generate n lightness gradients colors between two colors
+pub fn generate_lightness_gradient(
     color1: &Color,
     color2: &Color,
     n: usize,

@@ -1,3 +1,4 @@
 /target
 /tinted-builder-rust/template-operation_*
 /tinted-builder-rust/test_*
+**/.DS_Store

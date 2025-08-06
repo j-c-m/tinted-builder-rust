@@ -170,7 +170,7 @@ pub fn adjust_hsl(
     light_adj: f32,
 ) -> Result<Color, TintedBuilderError> {
     let adjusted_hsl = (
-        (color.hsl.0 * (1.0 + hue_adj)).rem_euclid(360.0),
+        ((color.hsl.0 + hue_adj) % 360.0 + 360.0) % 360.0,
         (color.hsl.1 + ((1.0 - color.hsl.1) * sat_adj)).clamp(0.0, 1.0),
         (color.hsl.2 + ((1.0 - color.hsl.2) * light_adj)).clamp(0.0, 1.0),
     );

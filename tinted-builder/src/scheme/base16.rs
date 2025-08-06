@@ -18,7 +18,7 @@ pub(crate) const REQUIRED_BASE24_PALETTE_KEYS: [&str; 24] = [
     "base12", "base13", "base14", "base15", "base16", "base17",
 ];
 
-pub(crate) const BRIGHT_BASE16_PALETTE_KEYS: [(&str, &str); 7] = [
+pub(crate) const BRIGHT_BASE16_PALETTE_KEYS: [(&str, &str); 8] = [
     ("bright08", "base08"),
     ("bright09", "base09"),
     ("bright0A", "base0A"),
@@ -26,6 +26,7 @@ pub(crate) const BRIGHT_BASE16_PALETTE_KEYS: [(&str, &str); 7] = [
     ("bright0C", "base0C"),
     ("bright0D", "base0D"),
     ("bright0E", "base0E"),
+    ("bright0F", "base0F"),
 ];
 
 pub(crate) const REQUIRED_ANSI8_PALETTE_KEYS: [(&str, &str); 8] = [
@@ -71,7 +72,7 @@ pub struct BrightAdjHSL {
     lightness: f32,
 }
 
-/// Generates bright colors (bright08 to bright0E) for the palette if they are not present.
+/// Generates bright colors (bright08 to bright0F) for the palette if they are not present.
 fn generate_bright_colors<D: serde::de::Error>(
     palette: &mut HashMap<String, Color>,
     hue_adj: f32,
@@ -203,7 +204,7 @@ impl<'de> Deserialize<'de> for Base16Scheme {
                 palette.insert("base03".to_string(), gradient01_05[3].clone());
                 palette.insert("base04".to_string(), gradient01_05[4].clone());
 
-                // Generate base06 from gradient between base05 and base07m
+                // Generate base06 from gradient between base05 and base07
                 let base07 = palette
                     .get("base07")
                     .ok_or(serde::de::Error::custom("Missing base07"))?
@@ -230,9 +231,9 @@ impl<'de> Deserialize<'de> for Base16Scheme {
                     .ok_or(serde::de::Error::custom("Missing base0B"))?
                     .clone();
                 let base0f = tint_color(&base08, &base0b, 0.5).map_err(serde::de::Error::custom)?;
-                palette.insert("base0f".to_string(), base0f);
+                palette.insert("base0F".to_string(), base0f);
 
-                // Generate bright08 to bright0E
+                // Generate bright08 to bright0F
                 generate_bright_colors(&mut palette, hue_adj, sat_adj, light_adj)?;
 
                 Ok(Base16Scheme {
@@ -271,7 +272,7 @@ impl<'de> Deserialize<'de> for Base16Scheme {
 
                 let mut palette = palette_result?;
 
-                // Generate bright08 to bright0E
+                // Generate bright08 to bright0F
                 generate_bright_colors(&mut palette, hue_adj, sat_adj, light_adj)?;
 
                 Ok(Base16Scheme {

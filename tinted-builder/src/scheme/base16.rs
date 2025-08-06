@@ -47,8 +47,7 @@ struct SchemeWrapper {
     pub(crate) author: String,
     pub(crate) description: Option<String>,
     pub(crate) variant: Option<SchemeVariant>,
-    pub(crate) lightness: Option<f32>,
-    pub(crate) saturation: Option<f32>,
+    pub(crate) bright_adj_hsl: Option<BrightAdjHSL>,
     pub(crate) palette: HashMap<String, String>,
 }
 
@@ -60,17 +59,24 @@ pub struct Base16Scheme {
     pub author: String,
     pub description: Option<String>,
     pub variant: SchemeVariant,
-    pub lightness: Option<f32>,
-    pub saturation: Option<f32>,
+    pub bright_adj_hsl: Option<BrightAdjHSL>,
     pub palette: HashMap<String, Color>,
     pub provided_palette_keys: Vec<String>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct BrightAdjHSL {
+    hue: f32,
+    saturation: f32,
+    lightness: f32,
 }
 
 /// Generates bright colors (bright08 to bright0E) for the palette if they are not present.
 fn generate_bright_colors<D: serde::de::Error>(
     palette: &mut HashMap<String, Color>,
-    brgt_adj: f32,
+    hue_adj: f32,
     sat_adj: f32,
+    light_adj: f32,
 ) -> Result<(), D> {
     let bt_pairs = &BRIGHT_BASE16_PALETTE_KEYS[..];
 
@@ -83,7 +89,8 @@ fn generate_bright_colors<D: serde::de::Error>(
                     base_key, bt_key
                 )))?
                 .clone();
-            let new_color = adjust_hsl(&base_color, 0.0, sat_adj, brgt_adj).map_err(D::custom)?;
+            let new_color =
+                adjust_hsl(&base_color, hue_adj, sat_adj, light_adj).map_err(D::custom)?;
             palette.insert(bt_key.to_string(), new_color);
         }
     }
@@ -100,11 +107,11 @@ impl fmt::Display for Base16Scheme {
         writeln!(f, "slug: \"{}\"", self.slug)?;
         writeln!(f, "system: \"{}\"", self.system)?;
         writeln!(f, "variant: \"{}\"", self.variant)?;
-        if let Some(lightness) = self.lightness {
-            writeln!(f, "lightness: {}", lightness)?;
-        }
-        if let Some(saturation) = self.saturation {
-            writeln!(f, "saturation: {}", saturation)?;
+        if let Some(adj) = &self.bright_adj_hsl {
+            writeln!(f, "bright_adj_hsl:")?;
+            writeln!(f, "  hue: {}", adj.hue)?;
+            writeln!(f, "  saturation: {}", adj.saturation)?;
+            writeln!(f, "  lightness: {}", adj.lightness)?;
         }
         writeln!(f, "palette:")?;
 
@@ -134,20 +141,23 @@ impl<'de> Deserialize<'de> for Base16Scheme {
             .slug
             .map_or(slugify(&wrapper.name), |slug| slugify(&slug));
         let variant = wrapper.variant.unwrap_or(SchemeVariant::Dark);
-        let brgt_adj = wrapper
-            .lightness
-            .unwrap_or(if variant == SchemeVariant::Dark {
-                0.15
-            } else {
-                -0.2
-            });
-        let sat_adj = wrapper
-            .saturation
-            .unwrap_or(if variant == SchemeVariant::Dark {
+        let hue_adj = wrapper.bright_adj_hsl.as_ref().map_or(0.0, |adj| adj.hue);
+        let sat_adj = wrapper.bright_adj_hsl.as_ref().map_or(
+            if variant == SchemeVariant::Dark {
                 0.0
             } else {
                 0.2
-            });
+            },
+            |adj| adj.saturation,
+        );
+        let light_adj = wrapper.bright_adj_hsl.as_ref().map_or(
+            if variant == SchemeVariant::Dark {
+                0.15
+            } else {
+                -0.2
+            },
+            |adj| adj.lightness,
+        );
 
         let provided_palette_keys: Vec<String> = wrapper.palette.keys().cloned().collect();
         let mut palette = HashMap::new();
@@ -223,7 +233,7 @@ impl<'de> Deserialize<'de> for Base16Scheme {
                 palette.insert("base0f".to_string(), base0f);
 
                 // Generate bright08 to bright0E
-                generate_bright_colors(&mut palette, brgt_adj, sat_adj)?;
+                generate_bright_colors(&mut palette, hue_adj, sat_adj, light_adj)?;
 
                 Ok(Base16Scheme {
                     name: wrapper.name,
@@ -232,8 +242,7 @@ impl<'de> Deserialize<'de> for Base16Scheme {
                     author: wrapper.author,
                     description: wrapper.description,
                     variant,
-                    lightness: wrapper.lightness,
-                    saturation: wrapper.saturation,
+                    bright_adj_hsl: wrapper.bright_adj_hsl,
                     palette,
                     provided_palette_keys: provided_palette_keys,
                 })
@@ -263,7 +272,7 @@ impl<'de> Deserialize<'de> for Base16Scheme {
                 let mut palette = palette_result?;
 
                 // Generate bright08 to bright0E
-                generate_bright_colors(&mut palette, brgt_adj, sat_adj)?;
+                generate_bright_colors(&mut palette, hue_adj, sat_adj, light_adj)?;
 
                 Ok(Base16Scheme {
                     name: wrapper.name,
@@ -272,8 +281,7 @@ impl<'de> Deserialize<'de> for Base16Scheme {
                     author: wrapper.author,
                     description: wrapper.description,
                     variant,
-                    lightness: wrapper.lightness,
-                    saturation: wrapper.saturation,
+                    bright_adj_hsl: wrapper.bright_adj_hsl,
                     palette,
                     provided_palette_keys: provided_palette_keys,
                 })
@@ -307,8 +315,7 @@ impl<'de> Deserialize<'de> for Base16Scheme {
                     author: wrapper.author,
                     description: wrapper.description,
                     variant,
-                    lightness: wrapper.lightness,
-                    saturation: wrapper.saturation,
+                    bright_adj_hsl: wrapper.bright_adj_hsl,
                     palette: palette_result?,
                     provided_palette_keys: provided_palette_keys,
                 })
@@ -337,11 +344,8 @@ impl Serialize for Base16Scheme {
             state.serialize_field("description", description)?;
         }
         state.serialize_field("variant", &self.variant)?;
-        if let Some(lightness) = &self.lightness {
-            state.serialize_field("lightness", lightness)?;
-        }
-        if let Some(saturation) = &self.saturation {
-            state.serialize_field("saturation", saturation)?;
+        if let Some(bright_adj_hsl) = &self.bright_adj_hsl {
+            state.serialize_field("bright_adj_hsl", bright_adj_hsl)?;
         }
 
         // Collect and sort the palette by key, including only provided keys

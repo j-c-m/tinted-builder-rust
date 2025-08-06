@@ -171,8 +171,8 @@ pub fn adjust_hsl(
 ) -> Result<Color, TintedBuilderError> {
     let adjusted_hsl = (
         (color.hsl.0 * (1.0 + hue_adj)).rem_euclid(360.0),
-        (color.hsl.1 * (1.0 + sat_adj)).clamp(0.0, 1.0),
-        (color.hsl.2 * (1.0 + light_adj)).clamp(0.0, 1.0),
+        (color.hsl.1 + ((1.0 - color.hsl.1) * sat_adj)).clamp(0.0, 1.0),
+        (color.hsl.2 + ((1.0 - color.hsl.2) * light_adj)).clamp(0.0, 1.0),
     );
     let adjusted_rgb = hsl_to_rgb(&adjusted_hsl);
     Color::new(format!(

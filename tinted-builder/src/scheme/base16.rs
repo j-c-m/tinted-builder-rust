@@ -138,14 +138,14 @@ impl<'de> Deserialize<'de> for Base16Scheme {
             .map_or(slugify(&wrapper.name), |slug| slugify(&slug));
         let variant = wrapper.variant.unwrap_or(SchemeVariant::Dark);
         let brgt_adj = wrapper.bright.unwrap_or(if variant == SchemeVariant::Dark {
-            0.1
+            0.2
         } else {
-            -0.1
+            -0.2
         });
         let sat_adj = wrapper
             .saturation
             .unwrap_or(if variant == SchemeVariant::Dark {
-                -0.2
+                0.0
             } else {
                 0.2
             });

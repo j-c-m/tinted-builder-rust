@@ -240,7 +240,7 @@ pub fn generate_grayish_gradient(
         } else if h >= 360.0 {
             h -= 360.0;
         }
-        let s = (color1.hsl.1 + t * (color2.hsl.1 - color1.hsl.1)) * 0.2; // Reduce saturation to 20%
+        let s = (color2.hsl.1 - color1.hsl.1) * 0.5;
         let l = color1.hsl.2 + t * (color2.hsl.2 - color1.hsl.2);
         let interp_hsl = (h, s.clamp(0.0, 1.0), l.clamp(0.0, 1.0));
         let interp_rgb = hsl_to_rgb(&interp_hsl);
@@ -256,7 +256,7 @@ pub fn generate_grayish_gradient(
 // Invert the lightness of a color to generate a complementary color
 pub fn invert_lightness(color: &Color) -> Result<Color, TintedBuilderError> {
     let bright_l = 1.0 - color.hsl.2;
-    let bright_hsl = (color.hsl.0, color.hsl.1 * 0.2, bright_l.clamp(0.0, 1.0));
+    let bright_hsl = (color.hsl.0, color.hsl.1, bright_l.clamp(0.0, 1.0));
     let bright_rgb = hsl_to_rgb(&bright_hsl);
     let hex_full = format!(
         "{:02x}{:02x}{:02x}",

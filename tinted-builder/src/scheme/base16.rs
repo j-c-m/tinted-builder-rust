@@ -314,6 +314,27 @@ impl<'de> Deserialize<'de> for Base16Scheme {
                     })
                     .collect();
 
+                let mut palette = palette_result?;
+
+                // Map Base24 bright colors to their corresponding bright keys
+                let bright_mappings = [
+                    ("base12", "bright08"),
+                    ("base13", "bright0A"),
+                    ("base14", "bright0B"),
+                    ("base15", "bright0C"),
+                    ("base16", "bright0D"),
+                    ("base17", "bright0E"),
+                ];
+
+                for (base_key, bright_key) in bright_mappings {
+                    if let Some(color) = palette.get(base_key) {
+                        palette.insert(bright_key.to_string(), color.clone());
+                    }
+                }
+
+                // Generate any remaining bright colors if not already present
+                generate_bright_colors(&mut palette, hue_adj, sat_adj, light_adj)?;
+
                 Ok(Base16Scheme {
                     name: wrapper.name,
                     slug,
@@ -322,7 +343,7 @@ impl<'de> Deserialize<'de> for Base16Scheme {
                     description: wrapper.description,
                     variant,
                     bright_adj_hsl: wrapper.bright_adj_hsl,
-                    palette: palette_result?,
+                    palette,
                     provided_palette_keys: provided_palette_keys,
                 })
             }

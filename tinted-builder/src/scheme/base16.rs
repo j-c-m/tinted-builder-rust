@@ -225,12 +225,17 @@ impl<'de> Deserialize<'de> for Base16Scheme {
                 let base09 = tint_color(&base08, &base0a, 0.5).map_err(serde::de::Error::custom)?;
                 palette.insert("base09".to_string(), base09);
 
-                // Generate base0F (brown: tint between red and green)
-                let base0b = palette
-                    .get("base0B")
-                    .ok_or(serde::de::Error::custom("Missing base0B"))?
+                // Generate base0F (brown: tint between base09 (orange) and black)
+                let base09 = palette
+                    .get("base09")
+                    .ok_or(serde::de::Error::custom("Missing base09"))?
                     .clone();
-                let base0f = tint_color(&base08, &base0b, 0.5).map_err(serde::de::Error::custom)?;
+                let base0f = tint_color(
+                    &base09,
+                    &Color::new("#000000".to_string()).map_err(serde::de::Error::custom)?,
+                    0.2,
+                )
+                .map_err(serde::de::Error::custom)?;
                 palette.insert("base0F".to_string(), base0f);
 
                 // Generate bright08 to bright0F

@@ -169,10 +169,13 @@ pub fn adjust_hsl(
     sat_adj: f32,
     light_adj: f32,
 ) -> Result<Color, TintedBuilderError> {
+    let adjust = |val: f32, adj: f32| {
+        (val + (if adj >= 0.0 { 1.0 - val } else { val } * adj)).clamp(0.0, 1.0)
+    };
     let adjusted_hsl = (
-        ((color.hsl.0 + hue_adj) % 360.0 + 360.0) % 360.0,
-        (color.hsl.1 + ((1.0 - color.hsl.1) * sat_adj)).clamp(0.0, 1.0),
-        (color.hsl.2 + ((1.0 - color.hsl.2) * light_adj)).clamp(0.0, 1.0),
+        (color.hsl.0 + hue_adj).rem_euclid(360.0),
+        adjust(color.hsl.1, sat_adj),
+        adjust(color.hsl.2, light_adj),
     );
     let adjusted_rgb = hsl_to_rgb(&adjusted_hsl);
     Color::new(format!(

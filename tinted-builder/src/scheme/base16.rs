@@ -147,15 +147,15 @@ impl<'de> Deserialize<'de> for Base16Scheme {
             if variant == SchemeVariant::Dark {
                 0.0
             } else {
-                0.2
+                0.25
             },
             |adj| adj.saturation,
         );
         let light_adj = wrapper.bright_adj_hsl.as_ref().map_or(
             if variant == SchemeVariant::Dark {
-                0.15
+                0.25
             } else {
-                -0.2
+                -0.25
             },
             |adj| adj.lightness,
         );
